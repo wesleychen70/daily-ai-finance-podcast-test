@@ -1,0 +1,100 @@
+name: Daily verified AI finance podcast (TEST ONLY)
+on:
+  workflow_dispatch:
+  schedule:
+    # 05:17, 06:07, 06:32 Asia/Taipei; UTC day before. Best effort, no delivery SLA.
+    - cron: '17 21 * * *'
+    - cron: '7,32 22 * * *'
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: daily-finance-test
+  cancel-in-progress: false
+jobs:
+  podcast:
+    if: vars.PIPELINE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      PUBLIC_TEST_ENABLED: ${{ vars.PUBLIC_TEST_ENABLED }}
+      PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
+      FALLBACK_MEDIA_BASE: ${{ vars.PAGES_BASE_URL }}
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - id: plan
+        run: python scripts/ci_run.py
+      - uses: actions/cache/restore@v4
+        if: steps.plan.outputs.skip != 'true'
+        with:
+          path: ${{ steps.plan.outputs.work }}
+          key: speech-${{ steps.plan.outputs.date }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: speech-${{ steps.plan.outputs.date }}-
+      - name: Generate with evidence and audio gates
+        if: steps.plan.outputs.skip != 'true'
+        run: python -m podcast generate --work '${{ steps.plan.outputs.work }}'
+      - name: Upload release and validate public media
+        id: release
+        if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
+        continue-on-error: true
+        run: python -m podcast publish --work '${{ steps.plan.outputs.work }}'
+      - name: Prepare Pages media fallback if Release transport fails
+        id: fallback
+        if: steps.release.outcome == 'failure'
+        run: python scripts/prepare_fallback.py '${{ steps.plan.outputs.work }}'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.fallback.outputs.needed == 'true'
+        with:
+          name: pages-media-stage
+          path: public
+      - uses: actions/deploy-pages@v4
+        if: steps.fallback.outputs.needed == 'true'
+        with:
+          artifact_name: pages-media-stage
+      - name: Probe fallback and build RSS
+        if: steps.release.outcome == 'failure'
+        run: python -m podcast publish --work '${{ steps.plan.outputs.work }}'
+      - name: Reject late scheduled publication
+        if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
+        run: python -c "import os; from podcast.common import now; assert os.environ.get('GITHUB_EVENT_NAME') != 'schedule' or (now().hour,now().minute) < (6,58), 'Publication deadline missed; keep previous RSS'"
+      - name: Preserve feed and activity for future runs
+        if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public
+          git diff --cached --quiet || git commit -m 'Update verified test podcast feed [skip ci]'
+          git push
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
+        with:
+          path: public
+      - uses: actions/deploy-pages@v4
+        id: deploy
+        if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
+      - name: Verify live RSS after deployment
+        if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
+        run: python scripts/check_pages.py '${{ steps.plan.outputs.work }}'
+      - uses: actions/cache/save@v4
+        if: always() && steps.plan.outputs.skip == 'false'
+        with:
+          path: ${{ steps.plan.outputs.work }}
+          key: speech-${{ steps.plan.outputs.date }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.plan.outputs.skip == 'false'
+        with:
+          name: verification-${{ steps.plan.outputs.date }}-${{ github.run_id }}
+          path: ${{ steps.plan.outputs.work }}
+          retention-days: 7

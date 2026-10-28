@@ -1,0 +1,85 @@
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from urllib.parse import quote
+
+from .common import GateError, now, request, save, sha
+from .feed import build_feed
+from .hosting import probe_media
+
+
+def github(method, path, **kwargs):
+    token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    if not token:
+        raise GateError('GitHub token is missing')
+    return request(method, 'https://api.github.com' + path,
+                   headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json'}, **kwargs)
+
+
+def publish(work, repo, base_url, fallback_base=''):
+    if os.environ.get('PUBLIC_TEST_ENABLED') != 'true':
+        raise GateError('Public test publication is disabled')
+    if not repo or not base_url:
+        raise GateError('Repository and Pages URL required')
+    manifest = json.loads((work / 'manifest.json').read_text(encoding='utf-8'))
+    if manifest['status'] != 'VERIFIED_TEST' or sha(work / 'episode.mp3') != manifest['sha256']:
+        raise GateError('PUBLISH_GATE: manifest or audio changed')
+    # Bind every verified artifact to its exact reviewed bytes.
+    for name, digest in manifest['files'].items():
+        if sha(work / name) != digest:
+            raise GateError('PUBLISH_GATE: reviewed artifact modified: ' + name)
+    tag = 'test-' + manifest['date']
+    url = f'https://github.com/{repo}/releases/download/{tag}/episode.mp3'
+    releases = github('GET', f'/repos/{repo}/releases?per_page=100').json()
+    release = next((x for x in releases if x['tag_name'] == tag), None)
+    if not release:
+        release = github('POST', f'/repos/{repo}/releases', json={
+            'tag_name': tag, 'name': manifest['title'], 'draft': True, 'prerelease': True,
+            'body': '技術測試，非正式節目。來源與逐字稿附於附件；未提交 Spotify。'}).json()
+    upload = release['upload_url'].split('{')[0]
+    token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    existing = {a['name']: a for a in release.get('assets', [])}
+    names = ['episode.mp3', 'transcript.txt', 'sources.json', 'script.json', 'editorial-check.json', 'audio-check.json', 'manifest.json']
+    for name in names:
+        p = work / name
+        if name in existing:
+            # Public releases are immutable in this pipeline. Never silently replace media under same GUID.
+            if not release['draft']:
+                continue
+            github('DELETE', f'/repos/{repo}/releases/assets/{existing[name]["id"]}')
+        mime = 'audio/mpeg' if name.endswith('.mp3') else 'application/json' if name.endswith('.json') else 'text/plain; charset=utf-8'
+        request('POST', upload + '?name=' + quote(name), headers={
+            'Authorization': 'Bearer ' + token, 'Content-Type': mime}, data=p.read_bytes())
+    if release['draft']:
+        github('PATCH', f'/repos/{repo}/releases/{release["id"]}', json={'draft': False})
+    try:
+        report = probe_media(url, manifest['sha256'], manifest['bytes'])
+        fallback = False
+    except GateError:
+        # Simplest no-account fallback: serve a bounded rolling set of MP3s on Pages.
+        # Deploy/probe before including the URL in RSS; pages-publish does this phase.
+        if not fallback_base:
+            raise GateError('Release hosting failed; RSS unchanged. Configure Pages media fallback and re-run.') from None
+        url = fallback_base.rstrip('/') + f'/media/{tag}.mp3'
+        report = probe_media(url, manifest['sha256'], manifest['bytes'])
+        fallback = True
+    save(work / 'hosting-check.json', report)
+    directory = Path('public')
+    statepath = directory / 'episodes.json'
+    episodes = json.loads(statepath.read_text(encoding='utf-8')) if statepath.exists() else []
+    episode = dict(manifest, audio_url=url,
+                   transcript_url=f'https://github.com/{repo}/releases/download/{tag}/transcript.txt')
+    episodes = [x for x in episodes if x['guid'] != episode['guid']] + [episode]
+    if fallback:
+        episodes = sorted(episodes, key=lambda x: x['date'], reverse=True)[:20]
+        keep = {'test-' + x['date'] + '.mp3' for x in episodes}
+        media = directory / 'media'
+        if media.exists():
+            for path in media.glob('test-*.mp3'):
+                if path.name not in keep:
+                    path.unlink()
+    save(statepath, episodes)
+    build_feed(episodes, directory, base_url)
+    return report

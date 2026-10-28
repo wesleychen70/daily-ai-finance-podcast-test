@@ -1,0 +1,226 @@
+import csv
+import html
+import io
+import json
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
+
+from defusedxml import ElementTree as ET
+
+from .common import GateError, TAIPEI, now, request, save, sha
+
+FEEDS = {
+    'fed': ('macro', 'Federal Reserve', 'https://www.federalreserve.gov/feeds/press_all.xml'),
+    'bls': ('macro', 'BLS', 'https://www.bls.gov/feed/bls_latest.rss'),
+    'economy': ('macro', 'CNBC', 'https://www.cnbc.com/id/20910258/device/rss/rss.html'),
+    'tech': ('tech', 'CNBC', 'https://www.cnbc.com/id/19854910/device/rss/rss.html'),
+    'world': ('world', 'CNBC', 'https://www.cnbc.com/id/100727362/device/rss/rss.html'),
+    'nvidia': ('tech', 'NVIDIA', 'https://nvidianews.nvidia.com/releases.xml'),
+    'microsoft': ('tech', 'Microsoft', 'https://blogs.microsoft.com/feed/'),
+    'ecb': ('world', 'ECB', 'https://www.ecb.europa.eu/rss/press.html'),
+}
+SYMBOLS = {'sp500': '^GSPC', 'nasdaq': '^IXIC', 'dow': '^DJI',
+           'nikkei': '^N225', 'hsi': '^HSI', 'dax': '^GDAXI'}
+
+
+def plain(value):
+    return re.sub(r'\s+', ' ', html.unescape(re.sub('<[^>]+>', ' ', value or ''))).strip()
+
+
+def parse_date(value):
+    try:
+        d = parsedate_to_datetime(value)
+    except (ValueError, TypeError):
+        d = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if not d.tzinfo:
+        raise GateError('Source publication timezone missing')
+    return d
+
+
+def fresh(date, cutoff, days):
+    delta = cutoff - date
+    return timedelta(0) <= delta <= timedelta(days=days)
+
+
+def rss_records(raw, name, category, cutoff):
+    root = ET.fromstring(raw)
+    result = []
+    for node in root.findall('.//item'):
+        title = plain(node.findtext('title'))
+        link = node.findtext('link', '')
+        try:
+            published = parse_date(node.findtext('pubDate', ''))
+        except (ValueError, TypeError, GateError):
+            continue
+        if not fresh(published, cutoff, 7) or not link.startswith('https://'):
+            continue
+        description = plain(node.findtext('description'))[:900]
+        result.append({'category': category, 'publisher': name, 'url': link,
+                       'published_at': published.isoformat(),
+                       'evidence': title + '\n' + description,
+                       'scope': 'RSS headline and publisher-provided summary only; do not infer article details'})
+    return result[:10]
+
+
+def yahoo(raw, key, cutoff):
+    result = json.loads(raw)['chart']['result'][0]
+    tz = ZoneInfo(result['meta']['exchangeTimezoneName'])
+    closes = result['indicators']['quote'][0]['close']
+    points = [(datetime.fromtimestamp(t, tz), float(c))
+              for t, c in zip(result['timestamp'], closes) if c is not None]
+    # Exclude today's live session. The show reports completed previous local sessions.
+    points = [(d, c) for d, c in points if d.date() < cutoff.astimezone(tz).date()]
+    if len(points) < 2:
+        raise GateError('Insufficient completed market sessions')
+    date, close = points[-1]
+    if not fresh(date, cutoff, 5):
+        raise GateError('Stale market observation')
+    change = (close / points[-2][1] - 1) * 100
+    return {'category': 'market', 'publisher': 'Yahoo Finance (unofficial public chart endpoint)',
+            'published_at': date.isoformat(), 'evidence':
+            f'{key} completed daily session {date.date()}: close {close:.2f}; daily change {change:+.2f}%. '
+            'This is a previous completed session, not a live quote.', 'scope': 'Market daily close'}
+
+
+def collect(work, cutoff=None):
+    cutoff = cutoff or now()
+    rawdir = work / 'raw'
+    rawdir.mkdir(parents=True, exist_ok=True)
+    tasks = {}
+    for key, (category, name, url) in FEEDS.items():
+        tasks[key] = (url, lambda raw, n=name, c=category: rss_records(raw, n, c, cutoff))
+    for key, symbol in SYMBOLS.items():
+        url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + quote(symbol) + '?range=10d&interval=1d'
+        tasks[key] = (url, lambda raw, k=key: [yahoo(raw, k, cutoff)])
+    twurl = 'https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX'
+
+    def twse(raw):
+        rows = json.loads(raw)
+        row = next(x for x in rows if (x.get('指數') or x.get('Index')) == '發行量加權股價指數')
+        value = row.get('日期') or row.get('Date')
+        if not value:
+            raise GateError('TWSE date field missing')
+        digits = re.sub(r'\D', '', value)
+        d = datetime(int(digits[:3]) + 1911, int(digits[3:5]), int(digits[5:7]), 13, 30, tzinfo=TAIPEI)
+        if not fresh(d, cutoff, 5):
+            raise GateError('TWSE observation is stale or future')
+        return [{'category': 'taiwan', 'publisher': 'TWSE', 'published_at': d.isoformat(),
+                 'evidence': json.dumps(row, ensure_ascii=False), 'scope': 'Official previous Taiwan close'}]
+    tasks['twse'] = (twurl, twse)
+
+    def vix(raw):
+        rows = list(csv.DictReader(io.StringIO(raw.decode('utf-8-sig'))))
+        valid = [(datetime.strptime(x['DATE'], '%m/%d/%Y').replace(hour=16, tzinfo=ZoneInfo('America/New_York')), x)
+                 for x in rows]
+        valid = [(d, x) for d, x in valid if d <= cutoff]
+        d, row = valid[-1]
+        if not fresh(d, cutoff, 5):
+            raise GateError('CBOE VIX stale')
+        return [{'category': 'risk', 'publisher': 'CBOE', 'published_at': d.isoformat(),
+                 'evidence': f'VIX closing value on {d.date()}: {float(row["CLOSE"]):.2f}. '
+                             'VIX measures option-implied expected volatility, not a directional prediction.',
+                 'scope': 'Official daily VIX closing value'}]
+    tasks['vix'] = ('https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv', vix)
+
+    def calendar(raw):
+        text = re.sub(r'\r?\n[ \t]', '', raw.decode('utf-8-sig'))
+        events = []
+        for block in text.split('BEGIN:VEVENT')[1:]:
+            start = re.search(r'DTSTART([^:]*):([^\r\n]+)', block)
+            title = re.search(r'SUMMARY:([^\r\n]+)', block)
+            if not start or not title:
+                continue
+            value = start[2].strip()
+            if value.endswith('Z'):
+                d = datetime.strptime(value, '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc)
+            else:
+                zone = re.search(r'TZID=([^;:]+)', start[1])
+                if not zone:
+                    continue
+                d = datetime.strptime(value, '%Y%m%dT%H%M%S').replace(tzinfo=ZoneInfo(zone[1]))
+            if d.astimezone(TAIPEI).date() == cutoff.date():
+                events.append(f'{d.astimezone(TAIPEI).isoformat()}: {plain(title[1])}')
+        # An empty verified calendar is evidence of no listed BLS event, not no global events.
+        return [{'category': 'events', 'publisher': 'BLS schedule', 'published_at': cutoff.isoformat(),
+                 'evidence': '\n'.join(events) if events else 'No BLS releases listed for this Taiwan calendar date. '
+                 'This calendar does not cover all central bank, corporate or global events.',
+                 'scope': 'BLS calendar only; use Taiwan time; no inference of unlisted events'}]
+    tasks['calendar'] = ('https://www.bls.gov/schedule/news_release/bls.ics', calendar)
+    # Independent official calendar fallback; do not treat a blocked calendar as an empty calendar.
+    def fed_calendar(raw):
+        text = plain(raw.decode('utf-8'))
+        start = text.find('Calendar')
+        text = text[max(0, start):max(0, start) + 24000]
+        if not any(month in text for month in ['January', 'October', 'November', 'December']):
+            raise GateError('Federal Reserve calendar body not recognized')
+        return [{'category': 'events', 'publisher': 'Federal Reserve official calendar',
+                 'published_at': cutoff.isoformat(), 'evidence': text,
+                 'scope': 'Calendar retrieved at cutoff, NOT publication timestamp. Only explicitly dated events '
+                          'on the target Taiwan date may be called today; convert US Eastern time using DST. '
+                          'Does not cover corporate or all global events.'}]
+    tasks['fed_calendar'] = ('https://www.federalreserve.gov/newsevents/calendar.htm', fed_calendar)
+    for series, label, max_age in [('DFF', 'Effective federal funds rate, percent (not the target range)', 10),
+                                    ('DGS10', '10-year Treasury yield, percent', 10),
+                                    ('CPIAUCSL', 'CPI all urban consumers, seasonally adjusted index', 65),
+                                    ('PCEPILFE', 'Core PCE price index, seasonally adjusted index', 75)]:
+        def fred(raw, s=series, label=label, age=max_age):
+            rows = list(csv.DictReader(io.StringIO(raw.decode('utf-8-sig'))))
+            valid = [(datetime.fromisoformat(x.get('observation_date') or x.get('DATE')).replace(tzinfo=TAIPEI), x[s])
+                     for x in rows if x.get(s) not in (None, '', '.')]
+            valid = [(d, value) for d, value in valid if d <= cutoff]
+            d, value = valid[-1]
+            if not fresh(d, cutoff, age):
+                raise GateError('Stale FRED observation: ' + s)
+            return [{'category': 'macro', 'publisher': 'FRED / Federal Reserve Bank of St. Louis',
+                     'published_at': cutoff.isoformat(), 'evidence': f'{s}: {label}. Latest observation period '
+                     f'{d.date()}; value {value}. Observation date is NOT the announcement date. '
+                     'Price index levels are NOT inflation percentages; no calculated inflation rate supplied.',
+                     'scope': 'Retrieved at cutoff; observation is a period, not release timestamp; revisions possible.'}]
+        tasks['fred_' + series] = (f'https://fred.stlouisfed.org/graph/graph.csv?id={series}&cosd='
+                                  + (cutoff - timedelta(days=400)).date().isoformat(), fred)
+    records, audit = [], []
+
+    def run(key):
+        url, parser = tasks[key]
+        r = request('GET', url)
+        p = rawdir / (key + '.bin')
+        p.write_bytes(r.content)
+        items = parser(r.content)
+        for index, item in enumerate(items):
+            item.update(id=f'{key}-{index}', source_url=url, fetched_at=cutoff.isoformat(),
+                        raw_file=p.name, raw_sha256=sha(p))
+            item.setdefault('url', url)
+        return items, {'source': key, 'status': 'OK', 'url': url, 'records': len(items), 'sha256': sha(p)}
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(run, key): key for key in tasks}
+        for future in as_completed(futures):
+            key = futures[future]
+            try:
+                items, result = future.result()
+                records.extend(items)
+                audit.append(result)
+            except Exception as exc:
+                audit.append({'source': key, 'status': 'FAILED', 'error': str(exc)[:250]})
+    records.sort(key=lambda x: x['id'])
+    bundle = {'cutoff': cutoff.isoformat(), 'records': records, 'audit': audit}
+    save(work / 'sources.json', bundle)
+    return bundle
+
+
+def source_gate(bundle):
+    records = bundle['records']
+    categories = {r['category'] for r in records}
+    required = {'market', 'taiwan', 'macro', 'tech', 'world', 'risk', 'events'}
+    missing = sorted(required - categories)
+    ids = {r['id'] for r in records}
+    if not {'sp500-0', 'nasdaq-0'} <= ids:
+        missing.append('US benchmarks')
+    if not any(k in ids for k in ('nikkei-0', 'hsi-0', 'dax-0')):
+        missing.append('global benchmark')
+    if missing:
+        raise GateError('SOURCE_GATE: missing ' + ', '.join(missing))
