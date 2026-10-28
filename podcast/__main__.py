@@ -25,8 +25,10 @@ def main():
             return
         if args.command == 'publish':
             from .publish import publish
-            publish(work, os.environ.get('GITHUB_REPOSITORY'), os.environ.get('PAGES_BASE_URL'),
-                    os.environ.get('FALLBACK_MEDIA_BASE', ''))
+            hosted = publish(work, os.environ.get('GITHUB_REPOSITORY'), os.environ.get('PAGES_BASE_URL'),
+                             os.environ.get('FALLBACK_MEDIA_BASE', ''))
+            save(work / 'status.json', {'status': 'TEST_MEDIA_VERIFIED_FEED_PREPARED',
+                                       'hosting': hosted['status'], 'time': now().isoformat()})
             return
         if args.command == 'generate' and (work / 'manifest.json').exists():
             (work / 'manifest.json').replace(work / 'manifest.previous.json')

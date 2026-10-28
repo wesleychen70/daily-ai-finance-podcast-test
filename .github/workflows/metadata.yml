@@ -1,0 +1,41 @@
+name: Update existing verified podcast metadata
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: daily-finance-test
+  cancel-in-progress: false
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      PYTHONPATH: .
+      PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
+      PODCAST_OWNER_EMAIL: ${{ vars.PODCAST_OWNER_EMAIL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python scripts/refresh_metadata.py
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - uses: actions/deploy-pages@v4
+        id: deploy
+      - run: python scripts/check_pages.py build/metadata
+      - run: python scripts/refresh_metadata.py verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: metadata-verification-${{ github.run_id }}
+          path: build/metadata/*.json
+          retention-days: 7

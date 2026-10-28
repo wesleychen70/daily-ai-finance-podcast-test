@@ -2,6 +2,10 @@
 
 Python + Gemini API + GitHub Actions + Releases + Pages。**只有測試頻道，沒有正式節目發布或 Spotify 提交。**
 
+[20 分鐘試播](https://wesleychen70.github.io/daily-ai-finance-podcast-test/) ·
+[測試 RSS](https://wesleychen70.github.io/daily-ai-finance-podcast-test/rss-test.xml) ·
+[實際驗證與限制](DEPLOYMENT_REPORT.md)
+
 ## 執行
 
 Python 3.12，`python -m pip install -r requirements.txt`。複製 `.env.example` 為 `.env` 並填金鑰。
@@ -49,6 +53,8 @@ editorial-check.json、audio-check.json、manifest.json、status.json 與原始�
 
 Repository secret：`GEMINI_API_KEY`。
 Repository variables：`PIPELINE_ENABLED=true`、`PUBLIC_TEST_ENABLED=true`、`PAGES_BASE_URL=https://帳號.github.io/專案`。
+`PODCAST_OWNER_EMAIL` 只在使用者同意公開信箱後設定。更新既有 feed 的 email 等 metadata 可手動執行 metadata 工作流程，
+它會還原並核對已驗證 MP3，不重新產生稿件或 TTS。
 
 台灣時間 05:17 主跑；06:07、06:32 補跑。相同台灣日期 GUID 固定，已發 RSS 則跳過。
 HTTP 暫時錯誤重試最多三次。每日語音快取、API 請求上限（保守預留含重試共 210 次）、

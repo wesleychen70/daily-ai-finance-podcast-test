@@ -109,5 +109,5 @@ def publish(work, repo, base_url, fallback_base=''):
                 if path.name not in keep:
                     path.unlink()
     save(statepath, episodes)
-    build_feed(episodes, directory, base_url)
+    build_feed(episodes, directory, base_url, os.environ.get('PODCAST_OWNER_EMAIL', ''))
     return report

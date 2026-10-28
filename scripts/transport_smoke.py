@@ -8,6 +8,10 @@ from podcast.hosting import probe_media
 base = os.environ['PAGES_BASE_URL']
 directory = Path('public')
 if os.environ.get('SMOKE_STAGE') == 'prepare':
+    import json
+    state = directory / 'episodes.json'
+    if state.exists() and json.loads(state.read_text(encoding='utf-8')):
+        raise RuntimeError('Refusing to replace an existing podcast with the one-off empty smoke feed.')
     build_feed([], directory, base)
     media = directory / 'media'
     media.mkdir(exist_ok=True)
