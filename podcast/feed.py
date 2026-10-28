@@ -1,4 +1,5 @@
 import json
+import html
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -74,10 +75,16 @@ def build_feed(episodes, directory, base_url, email=''):
     cover(directory / 'cover.jpg')
     (directory / '.nojekyll').touch()
     (directory / 'robots.txt').write_text('User-agent: *\nDisallow: /\n', encoding='utf-8')
+    players = ''.join('<article><h2>' + html.escape(ep['title']) + '</h2><audio controls preload="none" src="'
+                      + html.escape(ep['audio_url'], quote=True) + '"></audio><p><a href="'
+                      + html.escape(ep['audio_url'], quote=True) + '">下載測試 MP3</a> · <a href="'
+                      + html.escape(ep['transcript_url'], quote=True) + '">逐字稿</a></p></article>'
+                      for ep in sorted(episodes, key=lambda x: x['date'], reverse=True)[:5])
     (directory / 'index.html').write_text('''<!doctype html><html lang="zh-Hant"><meta charset="utf-8">
 <meta name="robots" content="noindex"><title>每日 AI 財經早報｜測試</title>
 <style>body{max-width:760px;margin:4rem auto;padding:1rem;font:20px/1.7 system-ui;background:#101f35;color:#fff}a{color:#54dec4}</style>
 <h1>每日 AI 財經早報｜測試</h1><p>這是技術測試頻道，尚未提交 Spotify，不是正式節目。</p>
 <p>內容由 AI 自動生成並經程式與模型輔助檢查；不構成投資建議。</p>
-<a href="rss-test.xml">測試 RSS</a><p>逐字稿、來源與驗證記錄請見 GitHub Releases。</p></html>''', encoding='utf-8')
+<a href="rss-test.xml">測試 RSS</a><p>逐字稿、來源與驗證記錄請見 GitHub Releases。</p>'''
+                                        + players + '</html>', encoding='utf-8')
     return directory / 'rss-test.xml'

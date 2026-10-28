@@ -57,8 +57,11 @@ GitHub 排程可能延遲或漏跑，因此無法保證 07:00；Spotify 抓取�
 公開庫排程 60 日無活動會停用；成功發布會提交 feed 更新。連續失敗時須從 Actions 通知處理。
 
 Releases 相容性失敗時，先把 MP3 部署到 Pages、保留原 RSS，再實測 Pages 媒體網址，通過後才更新 RSS。
+實測 Releases 公開下載回傳 application/octet-stream；Pages 回傳 audio/mp3，可正常 HEAD、完整 GET 與 Range 206。
+這是 HTTP 相容性證據，Spotify 實際收錄仍未測試。Pages 媒體不納入 Git 歷史，透過快取或既有公開檔還原。
 Pages 備援只保留最近 20 集，避免超出站台大小；不是無限音訊庫。舊集會退出 RSS；若要保留全部舊集，
 需要另行核准外部儲存。部署或媒體檢查失敗時不宣稱可被 Spotify 抓取。
+Releases 保留所有原始測試音檔與驗證資料；checkpoint.zip 可在同一天 RSS 部署失敗後恢復已驗證語音。
 
 RSS：`/rss-test.xml`。測試首頁標記 noindex，RSS `itunes:block=Yes`，不提交任何目錄。
 這只能降低被目錄收錄的機會；測試網址及 Releases 本身是公開的。
