@@ -64,7 +64,9 @@ def publish(work, repo, base_url, fallback_base=''):
     upload = release['upload_url'].split('{')[0]
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     existing = {a['name']: a for a in release.get('assets', [])}
-    names = ['episode.mp3', 'transcript.txt', 'sources.json', 'script.json', 'editorial-check.json', 'audio-check.json', 'manifest.json']
+    from .checkpoint import pack
+    pack(work)
+    names = ['episode.mp3', 'transcript.txt', 'sources.json', 'script.json', 'editorial-check.json', 'audio-check.json', 'manifest.json', 'checkpoint.zip']
     for name in names:
         p = work / name
         if name in existing:
@@ -72,7 +74,7 @@ def publish(work, repo, base_url, fallback_base=''):
             if not release['draft']:
                 continue
             github('DELETE', f'/repos/{repo}/releases/assets/{existing[name]["id"]}')
-        mime = 'audio/mpeg' if name.endswith('.mp3') else 'application/json' if name.endswith('.json') else 'text/plain; charset=utf-8'
+        mime = 'audio/mpeg' if name.endswith('.mp3') else 'application/zip' if name.endswith('.zip') else 'application/json' if name.endswith('.json') else 'text/plain; charset=utf-8'
         request('POST', upload + '?name=' + quote(name), headers={
             'Authorization': 'Bearer ' + token, 'Content-Type': mime}, data=p.read_bytes())
     if release['draft']:

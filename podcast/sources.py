@@ -31,6 +31,20 @@ def plain(value):
     return re.sub(r'\s+', ' ', html.unescape(re.sub('<[^>]+>', ' ', value or ''))).strip()
 
 
+def fetch_source(key, url):
+    if key.startswith('fred_'):
+        # FRED's table pages respond to the stock requests client; the custom feed agent can stall.
+        import requests
+        try:
+            response = requests.get(url, timeout=(10, 20))
+            if response.status_code != 200:
+                raise GateError(f'FRED table HTTP {response.status_code}')
+            return response
+        except requests.RequestException:
+            raise GateError('FRED table unavailable') from None
+    return request('GET', url)
+
+
 def parse_date(value):
     try:
         d = parsedate_to_datetime(value)
@@ -221,7 +235,7 @@ def collect(work, cutoff=None):
 
     def run(key):
         url, parser = tasks[key]
-        r = request('GET', url)
+        r = fetch_source(key, url)
         p = rawdir / (key + '.bin')
         items = parser(r.content)
         p.write_bytes(r.content)

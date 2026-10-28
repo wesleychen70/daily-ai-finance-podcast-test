@@ -2,6 +2,8 @@ import copy
 import hashlib
 import json
 import tempfile
+import io
+import zipfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -131,6 +133,31 @@ class Gates(unittest.TestCase):
         with patch('podcast.hosting.request', return_value=Response()):
             with self.assertRaisesRegex(GateError, 'MIME'):
                 probe_media('https://example.org/login', 'bad', 2048)
+
+    def test_checkpoint_rejects_path_traversal(self):
+        from podcast.checkpoint import restore
+        memory = io.BytesIO()
+        with zipfile.ZipFile(memory, 'w') as archive:
+            archive.writestr('../stolen.txt', 'unexpected')
+        class Release:
+            status_code = 200
+            def json(self):
+                return {'assets': [{'name': 'checkpoint.zip', 'browser_download_url': 'https://example.org/cache'}]}
+        class Download:
+            content = memory.getvalue()
+        with tempfile.TemporaryDirectory() as directory:
+            with patch('requests.get', return_value=Release()), patch('podcast.checkpoint.request', return_value=Download()):
+                with self.assertRaisesRegex(GateError, 'Unsafe'):
+                    restore(Path(directory), 'owner/repo')
+
+    def test_snapshot_tampering_blocks_generation(self):
+        from podcast.sources import verify_snapshots
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            (work / 'raw').mkdir()
+            (work / 'raw/source.bin').write_bytes(b'changed')
+            with self.assertRaisesRegex(GateError, 'snapshot'):
+                verify_snapshots({'records': [{'id': 's', 'raw_file': 'source.bin', 'raw_sha256': 'incorrect'}]}, work)
 
 
 if __name__ == '__main__':

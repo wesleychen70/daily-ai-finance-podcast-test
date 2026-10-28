@@ -17,6 +17,10 @@ for prefix, uri in [('itunes', ITUNES), ('atom', ATOM), ('podcast', PODCAST)]:
 
 
 def cover(dest):
+    if Path(dest).exists():
+        with Image.open(dest) as existing:
+            if existing.size == (1600, 1600):
+                return
     image = Image.new('RGB', (1600, 1600), '#101f35')
     draw = ImageDraw.Draw(image)
     for y in range(800, 1500, 100):

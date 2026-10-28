@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .audio import synthesize
 from .common import GateError, load_env, now, save, sha
-from .editorial import create_script, transcript, validate_script, verify_script
+from .editorial import create_script, repair_script, transcript, validate_script, verify_script
 from .gemini import Gemini
 from .sources import collect, source_gate, verify_snapshots
 
@@ -52,9 +52,10 @@ def main():
                 if editorial_attempt == 1:
                     raise
                 corrections = json.loads((work / 'editorial-check.json').read_text(encoding='utf-8'))['issues']
-                # Preserve rejected drafts; the next attempt must be freshly reviewed, not downgraded.
-                for path in [work / 'script.json', *[work / f'section-{i}.json' for i in range(6)]]:
-                    path.replace(path.with_suffix('.rejected.json'))
+                if not corrections:
+                    raise GateError('EDITORIAL_GATE: incomplete review coverage; no content repair attempted')
+                save(work / 'script.rejected.json', script)
+                repair_script(gemini, script, bundle, corrections, work)
         (work / 'transcript.txt').write_text(transcript(script), encoding='utf-8')
         audio = synthesize(gemini, script, work)
         manifest = {'status': 'VERIFIED_TEST', 'date': now().date().isoformat(),

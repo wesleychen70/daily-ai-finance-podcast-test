@@ -42,6 +42,9 @@ jobs:
           path: ${{ steps.plan.outputs.work }}
           key: speech-${{ steps.plan.outputs.date }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: speech-${{ steps.plan.outputs.date }}-
+      - name: Restore a verified daily Release checkpoint if RSS previously failed
+        if: steps.plan.outputs.skip != 'true'
+        run: python scripts/restore_checkpoint.py '${{ steps.plan.outputs.work }}'
       - name: Generate with evidence and audio gates
         if: steps.plan.outputs.skip != 'true'
         run: python -m podcast generate --work '${{ steps.plan.outputs.work }}'

@@ -38,6 +38,8 @@ elif r.json().get('description') != '每日 AI 財經 Podcast 自動化系統｜
     raise GateError('Existing repo is not recognized as this test project')
 
 files = ['.gitignore', '.env.example', 'requirements.txt', 'README.md']
+if Path('public/cover.jpg').exists():
+    files.append('public/cover.jpg')
 files += [str(p).replace('\\', '/') for root in ['podcast', 'scripts', 'tests', '.github']
           for p in Path(root).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc']
 env = os.environ.copy()
