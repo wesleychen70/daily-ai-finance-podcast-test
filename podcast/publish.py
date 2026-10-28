@@ -66,7 +66,7 @@ def publish(work, repo, base_url, fallback_base=''):
     existing = {a['name']: a for a in release.get('assets', [])}
     from .checkpoint import pack
     pack(work)
-    names = ['episode.mp3', 'transcript.txt', 'sources.json', 'script.json', 'editorial-check.json', 'audio-check.json', 'manifest.json', 'checkpoint.zip']
+    names = ['episode.mp3', 'transcript.txt', 'sources.json', 'script.json', 'editorial-check.json', 'audio-check.json', 'audio-fidelity-check.json', 'manifest.json', 'checkpoint.zip']
     for name in names:
         p = work / name
         if name in existing:

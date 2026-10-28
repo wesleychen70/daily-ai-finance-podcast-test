@@ -110,5 +110,7 @@ jobs:
         if: always() && steps.plan.outputs.skip == 'false'
         with:
           name: verification-${{ steps.plan.outputs.date }}-${{ github.run_id }}
-          path: ${{ steps.plan.outputs.work }}
+          path: |
+            ${{ steps.plan.outputs.work }}/*.json
+            ${{ steps.plan.outputs.work }}/*.txt
           retention-days: 7
