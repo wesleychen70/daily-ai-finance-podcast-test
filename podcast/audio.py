@@ -67,9 +67,10 @@ def synthesize(gemini, script, work):
             gemini.speech(text, wav)
         ffmpeg('-y', '-i', wav, '-ar', '44100', '-ac', '1', '-codec:a', 'libmp3lame', '-b:a', '128k', mp3)
         length = duration(mp3)
-        if length < 10 or length > 240:
+        if length < 10 or length > 300:
             raise GateError('AUDIO_GATE: abnormal segment duration')
         report = gemini.json('''請實際聽取所附音訊，逐字轉錄成繁體中文。不要根據猜測補字。
+金融數值、日期、時間請使用阿拉伯數字，保留小數與正負，不要補入音訊未說出的資訊。
 評估是否有漏讀、加話、截斷、長段靜音、非中文、朗讀指令或音訊異常。
 回傳JSON {"transcript":"實際聽到的內容","approved":true或false,"issues":[],
 "taiwan_mandarin":true或false}。音色自然與台灣口音也必須合格才能批准。''', audio=mp3)
