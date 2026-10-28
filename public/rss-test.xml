@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0" version="2.0">
+  <channel>
+    <title>每日 AI 財經早報｜測試</title>
+    <link>https://wesleychen70.github.io/daily-ai-finance-podcast-test/</link>
+    <description>自動化系統測試。AI 生成的繁體中文財經摘要，非投資建議。</description>
+    <language>zh-TW</language>
+    <lastBuildDate>Wed, 28 Oct 2026 21:57:03 +0800</lastBuildDate>
+    <itunes:author>AI 財經早報測試</itunes:author>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:type>episodic</itunes:type>
+    <atom:link href="https://wesleychen70.github.io/daily-ai-finance-podcast-test/rss-test.xml" rel="self" type="application/rss+xml" />
+    <itunes:image href="https://wesleychen70.github.io/daily-ai-finance-podcast-test/cover.jpg" />
+    <itunes:category text="News">
+      <itunes:category text="Business News" />
+    </itunes:category>
+    <itunes:block>Yes</itunes:block>
+    <item>
+      <title>2026-10-28 AI 財經早報｜測試</title>
+      <guid isPermaLink="false">urn:daily-ai-finance:test:2026-10-28</guid>
+      <pubDate>Wed, 28 Oct 2026 21:56:39 +0800</pubDate>
+      <description>AI 自動生成測試節目。資料截止：2026-10-28T21:28:54.734877+08:00。非投資建議。</description>
+      <enclosure url="https://wesleychen70.github.io/daily-ai-finance-podcast-test/media/test-2026-10-28.mp3" length="19201087" type="audio/mpeg" />
+      <itunes:duration>1200</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      <podcast:transcript url="https://github.com/wesleychen70/daily-ai-finance-podcast-test/releases/download/test-2026-10-28/transcript.txt" type="text/plain" />
+    </item>
+  </channel>
+</rss>
