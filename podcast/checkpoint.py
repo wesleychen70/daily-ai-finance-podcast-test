@@ -23,8 +23,6 @@ def pack(work):
 
 
 def restore(work, repo):
-    if (work / 'manifest.json').exists():
-        return False
     headers = {'Accept': 'application/vnd.github+json'}
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     if token:

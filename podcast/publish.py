@@ -67,6 +67,8 @@ def publish(work, repo, base_url, fallback_base=''):
     from .checkpoint import pack
     pack(work)
     names = ['episode.mp3', 'transcript.txt', 'sources.json', 'script.json', 'editorial-check.json', 'audio-check.json', 'audio-fidelity-check.json', 'manifest.json', 'checkpoint.zip']
+    if (work / 'pilot-audio-assembly.json').exists():
+        names.append('pilot-audio-assembly.json')
     for name in names:
         p = work / name
         if name in existing:
