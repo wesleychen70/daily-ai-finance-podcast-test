@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import time
 from pathlib import Path
 
 from .common import GateError, now, request, save
@@ -13,7 +14,7 @@ class Gemini:
             raise GateError('GEMINI_API_KEY is missing')
         self.work = Path(work)
         self.ledger = self.work / 'api-budget.json'
-        self.model = os.environ.get('GEMINI_TEXT_MODEL', 'gemini-2.5-flash')
+        self.model = os.environ.get('GEMINI_TEXT_MODEL', 'gemini-3.5-flash-lite')
         self.tts_model = os.environ.get('GEMINI_TTS_MODEL', 'gemini-3.8-flash-lite-tts')
 
     def call(self, url, body):
@@ -23,7 +24,12 @@ class Gemini:
         # Includes HTTP retries in a conservative upper bound. Never upgrade billing.
         if budget['calls'] + 3 > 210:
             raise GateError('Daily API request budget exhausted')
+        # Keep sequential calls below four per minute, including ASR and chunk generation.
+        delay = 15.5 - (time.time() - budget.get('last_request', 0))
+        if delay > 0:
+            time.sleep(delay)
         budget['calls'] += 3
+        budget['last_request'] = time.time()
         save(self.ledger, budget)
         return request('POST', 'https://generativelanguage.googleapis.com/v1beta/' + url,
                        headers={'x-goog-api-key': self.key}, json=body).json()

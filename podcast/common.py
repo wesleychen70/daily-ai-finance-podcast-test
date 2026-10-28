@@ -48,9 +48,19 @@ def request(method, url, **kwargs):
         try:
             timeout = kwargs.pop('timeout', (15, 180) if method == 'POST' else (10, 30))
             r = requests.request(method, url, headers=headers, timeout=timeout, **kwargs)
+            if r.status_code == 429:
+                try:
+                    details = r.json().get('error', {}).get('details', [])
+                    violations = [v for detail in details for v in detail.get('violations', [])]
+                    if any('PerDay' in v.get('quotaId', '') for v in violations):
+                        raise GateError('FREE_TIER_DAILY_QUOTA_EXHAUSTED; no billing upgrade attempted')
+                except (ValueError, AttributeError):
+                    pass
             if r.status_code == 429 or r.status_code >= 500:
                 if attempt < 2:
-                    time.sleep(min(30, 5 * 2**attempt))
+                    retry = r.headers.get('Retry-After', '')
+                    delay = float(retry) if retry.isdigit() else (30 if r.status_code == 429 else 5 * 2**attempt)
+                    time.sleep(min(60, delay))
                     continue
             if not r.ok:
                 raise GateError(f'HTTP {r.status_code}: {url.split("?")[0]}')

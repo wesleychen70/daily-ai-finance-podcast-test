@@ -28,17 +28,20 @@ def duration(path):
 def chunks(script):
     out = []
     for section in script['sections']:
-        for p in section['paragraphs']:
-            sentences = re.split(r'(?<=[。！？])', p['text'])
-            current = ''
-            for sentence in sentences:
-                if len(current) + len(sentence) > 650 and current:
-                    out.append(current)
-                    current = ''
-                current += sentence
-            if current:
+        text = '\n\n'.join(p['text'] for p in section['paragraphs'])
+        if len(text) <= 1400:
+            out.append(text)
+            continue
+        sentences = re.split(r'(?<=[。！？])', text)
+        current = ''
+        for sentence in sentences:
+            if len(current) + len(sentence) > 1000 and current:
                 out.append(current)
-    if len(out) > 28:
+                current = ''
+            current += sentence
+        if current:
+            out.append(current)
+    if len(out) > 12:
         raise GateError('AUDIO_GATE: too many chunks for daily budget')
     return out
 

@@ -11,7 +11,8 @@ def probe_media(url, expected_sha, expected_size):
     head = request('HEAD', url, headers=headers, allow_redirects=True)
     if head.status_code != 200 or int(head.headers.get('Content-Length', -1)) != expected_size:
         raise GateError('HOST_GATE: HEAD size/status mismatch')
-    if head.headers.get('Content-Type', '').split(';')[0] != 'audio/mpeg':
+    # Both are MP3 media types used by public static hosts. RSS always uses audio/mpeg.
+    if head.headers.get('Content-Type', '').split(';')[0] not in ('audio/mpeg', 'audio/mp3'):
         raise GateError('HOST_GATE: MP3 MIME type mismatch')
     partial = request('GET', url, headers={**headers, 'Range': 'bytes=0-1023'})
     if partial.status_code != 206 or len(partial.content) != 1024:
