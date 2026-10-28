@@ -54,13 +54,13 @@ def chunks(script):
     out = []
     for section in script['sections']:
         text = '\n\n'.join(p['text'] for p in section['paragraphs'])
-        if len(text) <= 1400:
+        if len(text) <= 1200:
             out.append(text)
             continue
         sentences = re.split(r'(?<=[。！？])', text)
         current = ''
         for sentence in sentences:
-            if len(current) + len(sentence) > 1000 and current:
+            if len(current) + len(sentence) > 800 and current:
                 out.append(current)
                 current = ''
             current += sentence

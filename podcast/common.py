@@ -52,7 +52,8 @@ def request(method, url, **kwargs):
                 try:
                     details = r.json().get('error', {}).get('details', [])
                     violations = [v for detail in details for v in detail.get('violations', [])]
-                    if any('PerDay' in v.get('quotaId', '') for v in violations):
+                    message = str(r.json().get('error', {}).get('message', '')).lower()
+                    if any('PerDay' in v.get('quotaId', '') for v in violations) or 'requests per day' in message:
                         raise GateError('FREE_TIER_DAILY_QUOTA_EXHAUSTED; no billing upgrade attempted')
                 except (ValueError, AttributeError):
                     pass

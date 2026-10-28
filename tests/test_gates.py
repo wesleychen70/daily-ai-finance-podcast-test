@@ -90,6 +90,20 @@ class Gates(unittest.TestCase):
         with self.assertRaisesRegex(GateError, 'target'):
             validate_script(script, bundle)
 
+    def test_editorial_approval_requires_exact_paragraph_coverage(self):
+        from podcast.editorial import verify_script
+        script, bundle = self.valid_script()
+        report = {'approved': True, 'issues': [], 'paragraph_checks':
+                  [{'id': f's{i}p0', 'approved': True, 'issues': []} for i in range(6)]}
+        class Reviewer:
+            def json(self, prompt):
+                return report
+        with tempfile.TemporaryDirectory() as directory:
+            verify_script(Reviewer(), script, bundle, Path(directory))
+            report['paragraph_checks'].pop()
+            with self.assertRaisesRegex(GateError, 'EDITORIAL_GATE'):
+                verify_script(Reviewer(), script, bundle, Path(directory))
+
     def test_audio_similarity_detects_changed_speech(self):
         self.assertEqual(audio_similarity('台股上漲。', '台股上漲！'), 1)
         self.assertLess(audio_similarity('台股上漲百分之一。', '美股重挫百分之八。'), .6)

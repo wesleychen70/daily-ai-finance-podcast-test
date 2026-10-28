@@ -50,7 +50,9 @@ def main():
             try:
                 verify_script(gemini, script, bundle, work)
                 break
-            except GateError:
+            except GateError as review_error:
+                if not str(review_error).startswith('EDITORIAL_GATE:'):
+                    raise
                 if editorial_attempt == 1:
                     raise
                 corrections = json.loads((work / 'editorial-check.json').read_text(encoding='utf-8'))['issues']
