@@ -10,6 +10,7 @@
 - [逐字稿與來源、驗證附件](https://github.com/wesleychen70/daily-ai-finance-podcast-test/releases/tag/test-2026-10-28)
 - [GitHub 專案](https://github.com/wesleychen70/daily-ai-finance-podcast-test)
 - [完整雲端續跑／部署成功記錄](https://github.com/wesleychen70/daily-ai-finance-podcast-test/actions/runs/40708846166)
+- [metadata 更新與重新驗證成功記錄](https://github.com/wesleychen70/daily-ai-finance-podcast-test/actions/runs/40785307803)
 
 試播集日期為 **2026-10-28**；新聞資料截止為 **2026-10-28 21:28（台灣時間）**，不是 10/29 的新節目。
 官方人名對照另依世界銀行人物介紹核對，不作為截止時間後的新財經消息。
@@ -28,6 +29,7 @@
 | Releases | 音檔與證據已儲存；公開下載實測回傳 application/octet-stream，因此未直接採作 RSS enclosure |
 | 媒體備援 | 實際切換 GitHub Pages；公開 MIME 為 audio/mp3，RSS enclosure 宣告 audio/mpeg，完整檔雜湊一致 |
 | RSS 與 Pages | 公網 HTTP 200、讀回一集正確 GUID；雲端部署與最終 RSS 檢查成功 |
+| metadata 獨立更新 | 雲端工作流程已成功部署原有已驗證集數、重新讀回 RSS 並核對 MP3 雜湊，未新增 TTS 或更動金融內容 |
 | Spotify RSS | 已登入並實際讀到節目標題、作者、說明；官方表單明確指出缺電子郵件地址 |
 | Spotify 所有權與實際音檔收錄 | **尚未完成**：需使用者提供同意公開於 RSS 的 email，並完成 Spotify 所有權認證；不宣稱 MP3 已被 Spotify 收錄 |
 | 真人試聽 | **NOT_RUN**；模型通過不等同人類確認口音與內容完全正確 |
