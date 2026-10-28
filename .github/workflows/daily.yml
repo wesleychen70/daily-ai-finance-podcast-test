@@ -1,5 +1,8 @@
 name: Daily verified AI finance podcast (TEST ONLY)
 on:
+  push:
+    paths:
+      - '.github/workflows/daily.yml'
   workflow_dispatch:
   schedule:
     # 05:17, 06:07, 06:32 Asia/Taipei; UTC day before. Best effort, no delivery SLA.

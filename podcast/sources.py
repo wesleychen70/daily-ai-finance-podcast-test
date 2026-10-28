@@ -72,8 +72,11 @@ def yahoo(raw, key, cutoff):
     closes = result['indicators']['quote'][0]['close']
     points = [(datetime.fromtimestamp(t, tz), float(c))
               for t, c in zip(result['timestamp'], closes) if c is not None]
-    # Exclude today's live session. The show reports completed previous local sessions.
-    points = [(d, c) for d, c in points if d.date() < cutoff.astimezone(tz).date()]
+    # At Taiwan 05:17 the US local date is still yesterday: include its finished session.
+    # Never discard a completed US session merely because the US calendar date hasn't changed.
+    close_hour, close_minute = {'nikkei': (15, 30), 'hsi': (16, 0), 'dax': (17, 30)}.get(key, (16, 0))
+    points = [(d, c) for d, c in points
+              if d.replace(hour=close_hour, minute=close_minute) + timedelta(minutes=15) <= cutoff]
     if len(points) < 2:
         raise GateError('Insufficient completed market sessions')
     date, close = points[-1]

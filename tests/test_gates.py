@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -42,6 +43,17 @@ class Gates(unittest.TestCase):
         records = [{'category': x, 'id': x} for x in ['market', 'taiwan', 'macro', 'tech', 'world', 'risk', 'events']]
         records += [{'category': 'market', 'id': x} for x in ['sp500-0', 'nasdaq-0', 'dax-0']]
         source_gate({'records': records})
+
+    def test_us_close_included_at_taiwan_morning(self):
+        from zoneinfo import ZoneInfo
+        eastern = ZoneInfo('America/New_York')
+        dates = [datetime(2026, 10, d, 9, 30, tzinfo=eastern) for d in [26, 27]]
+        data = {'chart': {'result': [{'meta': {'exchangeTimezoneName': 'America/New_York'},
+                'timestamp': [int(x.timestamp()) for x in dates],
+                'indicators': {'quote': [{'close': [100, 101]}]}}]}}
+        row = yahoo(json.dumps(data), 'sp500', self.cutoff)
+        self.assertIn('2026-10-27', row['evidence'])
+        self.assertIn('+1.00%', row['evidence'])
 
     def valid_script(self):
         bundle = {'records': [{'id': 's1', 'evidence': 'The closing value was 17.52.'}]}

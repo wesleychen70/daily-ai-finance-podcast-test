@@ -69,13 +69,24 @@ def create_script(gemini, bundle, work):
 回傳JSON：{"topics":[六節名稱],"title":"日期 AI 財經早報｜測試", "sections":[
 {"topic":"市場表現","paragraphs":[{"text":"口播內容","source_ids":["來源id"],"evidence_quotes":["原文片段"]}]}]}。
 六節名稱必須精確為：''' + json.dumps(TOPICS, ensure_ascii=False) + '\n證據：' + json.dumps(bundle, ensure_ascii=False)
-    script = gemini.json(prompt)
-    for section in script.get('sections', []):
-        for p in section.get('paragraphs', []):
-            p['text'] = CONVERTER.convert(p.get('text', ''))
-    validate_script(script, bundle)
-    save(path, script)
-    return script
+    for attempt in range(3):
+        script = gemini.json(prompt)
+        for section in script.get('sections', []):
+            for p in section.get('paragraphs', []):
+                p['text'] = CONVERTER.convert(p.get('text', ''))
+        save(work / f'draft-{attempt}.json', script)
+        try:
+            validate_script(script, bundle)
+        except GateError as exc:
+            if attempt == 2:
+                raise
+            prompt += '\n上次稿件未通過驗證：' + str(exc) + '''。
+請重新完整輸出合格的六節JSON。每段即使是一般解讀或開場也必須附真實source_ids及
+直接存在該來源evidence欄位的短引句，不能空陣列，不能自行改寫引句。
+來源ID只能從證據 records 的 id 欄位複製。總字數必須達標。'''
+            continue
+        save(path, script)
+        return script
 
 
 def verify_script(gemini, script, bundle, work):
