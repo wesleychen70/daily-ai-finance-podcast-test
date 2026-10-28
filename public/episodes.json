@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "status": "VERIFIED_TEST",
+    "date": "2026-10-28",
+    "guid": "urn:daily-ai-finance:test:2026-10-28",
+    "title": "2026-10-28 AI 財經早報｜測試",
+    "published_at": "2026-10-28T22:44:36.108800+08:00",
+    "description": "AI 自動生成測試節目。資料截止：2026-10-28T21:28:54.734877+08:00。非投資建議。",
+    "bytes": 19200670,
+    "sha256": "efff97d9fb2d6ccff1ccebaf08f68272f248cc5e11a4199029e586145e6bca5b",
+    "duration": 1200.01,
+    "files": {
+      "script.json": "dc735a139f81f90e8aa6660ba0f5de68d94954caa4c99a997f4f67c584fd756d",
+      "sources.json": "5f9666c492d044f78d9f0ab647ee99630af08b77ce6ad686cfb0224aa419f047",
+      "transcript.txt": "675bfd428813a31b58d082088bf755b65954276657b4fca2677f44f3af3057ce",
+      "editorial-check.json": "6ba998a76a6fbb4c9999524597d37ab5bc33bfe69ea28c01eaebdee48d2bf1d9",
+      "audio-check.json": "2652aee44c94fad4761f5547816684b517c0680ad3965b117357fec867ef86d0"
+    },
+    "audio_url": "https://wesleychen70.github.io/daily-ai-finance-podcast-test/media/test-2026-10-28.mp3",
+    "transcript_url": "https://github.com/wesleychen70/daily-ai-finance-podcast-test/releases/download/test-2026-10-28/transcript.txt"
+  }
+]
