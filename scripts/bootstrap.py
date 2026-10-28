@@ -89,5 +89,6 @@ github('PUT', f'/repos/{repo}/actions/permissions/workflow', json={'default_work
 save('artifacts/deployment.json', {'repository': 'https://github.com/' + repo,
       'pages_base': base, 'rss': base + '/rss-test.xml', 'configured': True,
       'live_rss_verified': False, 'spotify_ingestion': 'NOT_RUN', 'formal_publication': False})
-github('POST', f'/repos/{repo}/actions/workflows/daily.yml/dispatches', json={'ref': 'codex/daily-finance-podcast'})
-print('Configured and dispatched TEST pipeline: https://github.com/' + repo)
+if '--dispatch' in sys.argv:
+    github('POST', f'/repos/{repo}/actions/workflows/daily.yml/dispatches', json={'ref': 'codex/daily-finance-podcast'})
+print('Configured TEST pipeline: https://github.com/' + repo)

@@ -91,6 +91,8 @@ def yahoo(raw, key, cutoff):
 
 def collect(work, cutoff=None):
     cutoff = cutoff or now()
+    previous_path = work / 'sources.json'
+    previous = json.loads(previous_path.read_text(encoding='utf-8')) if previous_path.exists() else {'records': []}
     rawdir = work / 'raw'
     rawdir.mkdir(parents=True, exist_ok=True)
     tasks = {}
@@ -155,25 +157,56 @@ def collect(work, cutoff=None):
     tasks['calendar'] = ('https://www.bls.gov/schedule/news_release/bls.ics', calendar)
     # Independent official calendar fallback; do not treat a blocked calendar as an empty calendar.
     def fed_calendar(raw):
-        text = plain(raw.decode('utf-8'))
-        start = text.find('Calendar')
-        text = text[max(0, start):max(0, start) + 24000]
-        if not any(month in text for month in ['January', 'October', 'November', 'December']):
-            raise GateError('Federal Reserve calendar body not recognized')
+        body = raw.decode('utf-8')
+        if 'id="article"' not in body or 'panel-body' not in body:
+            raise GateError('Federal Reserve monthly calendar has no event body')
+        events, recognized = [], 0
+        for block in body.split('<div class="panel-body">')[1:]:
+            cols = [re.search(r'<div class="col-xs-' + size + r'">(.*?)</div>', block, re.S)
+                    for size in ['2', '7', '3']]
+            if not all(cols):
+                continue
+            time_text, title, days = [plain(x[1]) for x in cols]
+            clock = re.search(r'(\d{1,2}):(\d{2})\s*([ap])\.m\.', time_text, re.I)
+            if not clock:
+                continue
+            recognized += 1
+            hour = int(clock[1]) % 12 + (12 if clock[3].lower() == 'p' else 0)
+            for day in re.findall(r'\b\d{1,2}\b', days):
+                try:
+                    dt = datetime(cutoff.year, cutoff.month, int(day), hour, int(clock[2]),
+                                  tzinfo=ZoneInfo('America/New_York')).astimezone(TAIPEI)
+                except ValueError:
+                    continue
+                if cutoff.date() <= dt.date() <= (cutoff + timedelta(days=1)).date():
+                    events.append(dt.isoformat() + ': ' + title)
+        if not recognized:
+            raise GateError('Federal Reserve calendar time fields not recognized')
+        text = '\n'.join(events) if events else 'No timed Federal Reserve calendar entries matched the target '
+        if not events:
+            text += 'Taiwan date and next date. Events without exact times were not included; '
+            text += 'this is NOT evidence that no other events exist.'
         return [{'category': 'events', 'publisher': 'Federal Reserve official calendar',
                  'published_at': cutoff.isoformat(), 'evidence': text,
                  'scope': 'Calendar retrieved at cutoff, NOT publication timestamp. Only explicitly dated events '
                           'on the target Taiwan date may be called today; convert US Eastern time using DST. '
-                          'Does not cover corporate or all global events.'}]
-    tasks['fed_calendar'] = ('https://www.federalreserve.gov/newsevents/calendar.htm', fed_calendar)
+                          'Next-date events must be called tomorrow. Does not cover untimed events, corporate or all global events.'}]
+    month_name = cutoff.strftime('%B').lower()
+    tasks['fed_calendar'] = (f'https://www.federalreserve.gov/newsevents/{cutoff.year}-{month_name}.htm', fed_calendar)
     for series, label, max_age in [('DFF', 'Effective federal funds rate, percent (not the target range)', 10),
                                     ('DGS10', '10-year Treasury yield, percent', 10),
                                     ('CPIAUCSL', 'CPI all urban consumers, seasonally adjusted index', 65),
                                     ('PCEPILFE', 'Core PCE price index, seasonally adjusted index', 75)]:
         def fred(raw, s=series, label=label, age=max_age):
-            rows = list(csv.DictReader(io.StringIO(raw.decode('utf-8-sig'))))
-            valid = [(datetime.fromisoformat(x.get('observation_date') or x.get('DATE')).replace(tzinfo=TAIPEI), x[s])
-                     for x in rows if x.get(s) not in (None, '', '.')]
+            text = raw.decode('utf-8-sig')
+            if '<table' in text:
+                pairs = re.findall(r'<th[^>]*>\s*(\d{4}-\d{2}-\d{2})\s*</th>\s*<td[^>]*>\s*([-\d.]+)\s*</td>', text)
+                valid = [(datetime.fromisoformat(d).replace(tzinfo=TAIPEI), value)
+                         for d, value in pairs if value not in ('.', '-')]
+            else:
+                rows = list(csv.DictReader(io.StringIO(text)))
+                valid = [(datetime.fromisoformat(x.get('observation_date') or x.get('DATE')).replace(tzinfo=TAIPEI), x[s])
+                         for x in rows if x.get(s) not in (None, '', '.')]
             valid = [(d, value) for d, value in valid if d <= cutoff]
             d, value = valid[-1]
             if not fresh(d, cutoff, age):
@@ -183,16 +216,15 @@ def collect(work, cutoff=None):
                      f'{d.date()}; value {value}. Observation date is NOT the announcement date. '
                      'Price index levels are NOT inflation percentages; no calculated inflation rate supplied.',
                      'scope': 'Retrieved at cutoff; observation is a period, not release timestamp; revisions possible.'}]
-        tasks['fred_' + series] = (f'https://fred.stlouisfed.org/graph/graph.csv?id={series}&cosd='
-                                  + (cutoff - timedelta(days=400)).date().isoformat(), fred)
+        tasks['fred_' + series] = (f'https://fred.stlouisfed.org/data/{series}.txt', fred)
     records, audit = [], []
 
     def run(key):
         url, parser = tasks[key]
         r = request('GET', url)
         p = rawdir / (key + '.bin')
-        p.write_bytes(r.content)
         items = parser(r.content)
+        p.write_bytes(r.content)
         for index, item in enumerate(items):
             item.update(id=f'{key}-{index}', source_url=url, fetched_at=cutoff.isoformat(),
                         raw_file=p.name, raw_sha256=sha(p))
@@ -208,7 +240,16 @@ def collect(work, cutoff=None):
                 records.extend(items)
                 audit.append(result)
             except Exception as exc:
-                audit.append({'source': key, 'status': 'FAILED', 'error': str(exc)[:250]})
+                cached = [r for r in previous['records'] if r['id'].rsplit('-', 1)[0] == key
+                          and r.get('fetched_at', '')[:10] == cutoff.date().isoformat()
+                          and (rawdir / r['raw_file']).exists()
+                          and sha(rawdir / r['raw_file']) == r['raw_sha256']]
+                if cached:
+                    records.extend(cached)
+                    audit.append({'source': key, 'status': 'CACHED_SAME_DAY', 'records': len(cached),
+                                  'error': str(exc)[:250], 'original_fetched_at': cached[0]['fetched_at']})
+                else:
+                    audit.append({'source': key, 'status': 'FAILED', 'error': str(exc)[:250]})
     records.sort(key=lambda x: x['id'])
     bundle = {'cutoff': cutoff.isoformat(), 'records': records, 'audit': audit}
     save(work / 'sources.json', bundle)
@@ -227,3 +268,10 @@ def source_gate(bundle):
         missing.append('global benchmark')
     if missing:
         raise GateError('SOURCE_GATE: missing ' + ', '.join(missing))
+
+
+def verify_snapshots(bundle, work):
+    for record in bundle['records']:
+        path = work / 'raw' / record['raw_file']
+        if path.name != record['raw_file'] or not path.exists() or sha(path) != record['raw_sha256']:
+            raise GateError('SOURCE_GATE: raw snapshot missing or changed: ' + record['id'])

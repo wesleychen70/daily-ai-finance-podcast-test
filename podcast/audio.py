@@ -86,13 +86,16 @@ def synthesize(gemini, script, work):
     joined = work / 'joined.mp3'
     ffmpeg('-y', '-f', 'concat', '-safe', '0', '-i', listing, '-c', 'copy', joined)
     output = work / 'episode.mp3'
-    ffmpeg('-y', '-i', joined, '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+    original_length = duration(joined)
+    tempo = max(.85, min(1.15, original_length / 1200))
+    ffmpeg('-y', '-i', joined, '-af', f'atempo={tempo:.6f},loudnorm=I=-16:TP=-1.5:LRA=11',
            '-ar', '44100', '-ac', '1', '-codec:a', 'libmp3lame', '-b:a', '128k', output)
     length = duration(output)
     if not 1080 <= length <= 1380:
         raise GateError(f'AUDIO_GATE: expected 18-23 minutes, got {length / 60:.2f}')
     report = {'status': 'AUTOMATIC_CHECKS_PASSED', 'human_listening': 'NOT_RUN',
               'duration': length, 'sha256': sha(output), 'bytes': output.stat().st_size,
+              'original_duration': original_length, 'tempo_factor': tempo,
               'segments': reports, 'limitation': 'Model-assisted checks cannot guarantee factual or accent perfection.'}
     save(work / 'audio-check.json', report)
     return report

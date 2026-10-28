@@ -23,7 +23,7 @@ editorial-check.json、audio-check.json、manifest.json、status.json 與原始�
 2. 新聞以七日內為限，行情五日內以容許週末與假日。逐項明示資料日；這不是交易所假日推算器，長假可能停止產出。
 3. 六主題、4800–6800 個中文字；每段來源 ID 與原文證據片段。資料指令不能控制系統。
 4. 第二次獨立上下文的模型審查每段事實，問題清單必須為空。
-5. Gemini TTS 每段不超過約 650 字；MP3 128 kbps、44.1 kHz、單聲道，合併後響度目標 -16 LUFS、峰值 -1.5 dBTP。
+5. Gemini TTS 每段不超過約 650 字；MP3 128 kbps、44.1 kHz、單聲道，合併後響度目標 -16 LUFS、峰值 -1.5 dBTP；以不超過 15% 的語速調整接近 20 分鐘，仍超出時長門檻就拒絕。
 6. 每段實際音訊再送模型轉錄，與稿件相似度至少 93%，並檢查台灣國語、異常、漏讀。整集 18–23 分鐘，完全解碼後才產生 VERIFIED_TEST manifest。
 7. 發布前檢查音檔、稿件、來源及查核結果雜湊；RSS 僅接受 VERIFIED_TEST。
 8. Releases 公開檔以**未登入** HEAD、完整 GET、SHA-256、Range GET (206 / Content-Range) 實測後才進 RSS。

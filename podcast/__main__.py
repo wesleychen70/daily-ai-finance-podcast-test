@@ -8,7 +8,7 @@ from .audio import synthesize
 from .common import GateError, load_env, now, save, sha
 from .editorial import create_script, transcript, validate_script, verify_script
 from .gemini import Gemini
-from .sources import collect, source_gate
+from .sources import collect, source_gate, verify_snapshots
 
 
 def main():
@@ -34,6 +34,7 @@ def main():
         else:
             bundle = json.loads(sources_path.read_text(encoding='utf-8'))
         source_gate(bundle)
+        verify_snapshots(bundle, work)
         print(f'Source gate passed: {len(bundle["records"])} evidence records', flush=True)
         if args.command == 'collect':
             return
@@ -41,8 +42,19 @@ def main():
         if bundle['cutoff'][:10] != now().date().isoformat():
             raise GateError('Source bundle belongs to another Taiwan date')
         gemini = Gemini(work)
-        script = create_script(gemini, bundle, work)
-        verify_script(gemini, script, bundle, work)
+        corrections = None
+        for editorial_attempt in range(2):
+            script = create_script(gemini, bundle, work, corrections)
+            try:
+                verify_script(gemini, script, bundle, work)
+                break
+            except GateError:
+                if editorial_attempt == 1:
+                    raise
+                corrections = json.loads((work / 'editorial-check.json').read_text(encoding='utf-8'))['issues']
+                # Preserve rejected drafts; the next attempt must be freshly reviewed, not downgraded.
+                for path in [work / 'script.json', *[work / f'section-{i}.json' for i in range(6)]]:
+                    path.replace(path.with_suffix('.rejected.json'))
         (work / 'transcript.txt').write_text(transcript(script), encoding='utf-8')
         audio = synthesize(gemini, script, work)
         manifest = {'status': 'VERIFIED_TEST', 'date': now().date().isoformat(),

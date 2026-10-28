@@ -33,13 +33,16 @@ class Gemini:
         if audio:
             parts.append({'inlineData': {'mimeType': 'audio/mpeg',
                                         'data': base64.b64encode(Path(audio).read_bytes()).decode()}})
+        config = {'temperature': 0.1, 'responseMimeType': 'application/json', 'maxOutputTokens': 16384}
+        if self.model == 'gemini-2.5-flash':
+            config['thinkingConfig'] = {'thinkingBudget': 0}
         r = self.call(f'models/{self.model}:generateContent', {
             'contents': [{'role': 'user', 'parts': parts}],
-            'generationConfig': {'temperature': 0.1, 'responseMimeType': 'application/json',
-                                 'maxOutputTokens': 24000}})
+            'generationConfig': config})
         candidates = r.get('candidates', [])
         if not candidates or candidates[0].get('finishReason') != 'STOP':
-            raise GateError('Gemini output blocked or truncated')
+            reason = candidates[0].get('finishReason', 'UNKNOWN') if candidates else 'NO_CANDIDATE'
+            raise GateError('Gemini output blocked or truncated: ' + reason)
         return json.loads(''.join(p.get('text', '') for p in candidates[0]['content']['parts']))
 
     def speech(self, text, dest):
