@@ -55,6 +55,17 @@ def git(*args, check=True):
         raise GateError('Git operation failed: ' + r.stderr.replace(token, '[REDACTED]')[-1000:])
     return r
 
+remote_before = git('remote', 'get-url', 'origin', check=False)
+expected_before = f'https://github.com/{repo}.git'
+if remote_before.returncode == 0:
+    if remote_before.stdout.strip() != expected_before:
+        raise GateError('Existing origin points to a different repository')
+    git('pull', '--ff-only', 'origin', 'codex/daily-finance-podcast')
+if '--withdraw-current-test' in sys.argv:
+    from podcast.feed import build_feed
+    build_feed([], Path('public'), f'https://{user}.github.io/{name}')
+    save('public/episodes.json', [])
+    files += [str(p).replace('\\', '/') for p in Path('public').iterdir() if p.is_file()]
 git('add', '--', *files)
 diff = git('diff', '--cached', '--quiet', check=False)
 if diff.returncode:

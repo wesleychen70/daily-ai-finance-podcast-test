@@ -28,6 +28,8 @@ def main():
             publish(work, os.environ.get('GITHUB_REPOSITORY'), os.environ.get('PAGES_BASE_URL'),
                     os.environ.get('FALLBACK_MEDIA_BASE', ''))
             return
+        if args.command == 'generate' and (work / 'manifest.json').exists():
+            (work / 'manifest.json').replace(work / 'manifest.previous.json')
         sources_path = work / 'sources.json'
         if args.command == 'collect' or not sources_path.exists():
             bundle = collect(work)
