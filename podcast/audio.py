@@ -9,6 +9,31 @@ from .common import GateError, save, sha
 from .editorial import audio_similarity
 
 
+def spoken_percentages(text):
+    digits = '零一二三四五六七八九'
+    def number(value):
+        integer, dot, fraction = value.partition('.')
+        if int(integer) == 0:
+            result = '零'
+        elif len(integer) > 4:
+            result = ''.join(digits[int(x)] for x in integer)
+        else:
+            result, pending_zero = '', False
+            for index, digit in enumerate(integer):
+                power, n = len(integer) - index - 1, int(digit)
+                if n == 0:
+                    pending_zero = bool(result)
+                    continue
+                if pending_zero:
+                    result += '零'
+                pending_zero = False
+                result += digits[n] + ['', '十', '百', '千'][power]
+            if result.startswith('一十'):
+                result = result[1:]
+        return result + ('點' + ''.join(digits[int(x)] for x in fraction) if dot else '')
+    return re.sub(r'(\d+(?:\.\d+)?)%', lambda m: '百分之' + number(m[1]), text)
+
+
 def ffmpeg(*args):
     result = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-hide_banner', '-nostdin', *map(str, args)],
                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=180)
@@ -64,7 +89,7 @@ def synthesize(gemini, script, work):
                 reports.append(report)
                 continue
         if not wav.exists():
-            gemini.speech(text, wav)
+            gemini.speech(spoken_percentages(text), wav)
         ffmpeg('-y', '-i', wav, '-ar', '44100', '-ac', '1', '-codec:a', 'libmp3lame', '-b:a', '128k', mp3)
         length = duration(mp3)
         if length < 10 or length > 300:

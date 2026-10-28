@@ -94,6 +94,11 @@ class Gates(unittest.TestCase):
         self.assertEqual(audio_similarity('台股上漲。', '台股上漲！'), 1)
         self.assertLess(audio_similarity('台股上漲百分之一。', '美股重挫百分之八。'), .6)
 
+    def test_percentage_pronunciation_keeps_financial_precision(self):
+        from podcast.audio import spoken_percentages
+        self.assertEqual(spoken_percentages('股價上漲11%，指數漲1.18%，漲0.60%。'),
+                         '股價上漲百分之十一，指數漲百分之一點一八，漲百分之零點六零。')
+
     def test_feed_rejects_unverified_episode(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(GateError):
