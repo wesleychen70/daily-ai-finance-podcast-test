@@ -40,6 +40,10 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def canonical_sha(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
+
+
 def request(method, url, **kwargs):
     # Keys are headers, never URL query parameters or log output.
     headers = {'User-Agent': 'DailyFinancePodcast/0.1 (+source verification)'}

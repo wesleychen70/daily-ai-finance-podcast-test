@@ -101,8 +101,27 @@ class Gates(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             verify_script(Reviewer(), script, bundle, Path(directory))
             report['paragraph_checks'].pop()
+            (Path(directory) / 'editorial-check.json').unlink()
             with self.assertRaisesRegex(GateError, 'EDITORIAL_GATE'):
                 verify_script(Reviewer(), script, bundle, Path(directory))
+
+    def test_approved_review_reused_only_for_identical_inputs(self):
+        from podcast.editorial import verify_script
+        script, bundle = self.valid_script()
+        class Reviewer:
+            calls = 0
+            def json(self, prompt):
+                self.calls += 1
+                return {'approved': True, 'issues': [], 'paragraph_checks':
+                        [{'id': f's{i}p0', 'approved': True, 'issues': []} for i in range(6)]}
+        reviewer = Reviewer()
+        with tempfile.TemporaryDirectory() as directory:
+            verify_script(reviewer, script, bundle, Path(directory))
+            verify_script(reviewer, script, bundle, Path(directory))
+            self.assertEqual(reviewer.calls, 1)
+            bundle['cutoff'] = 'changed input'
+            verify_script(reviewer, script, bundle, Path(directory))
+            self.assertEqual(reviewer.calls, 2)
 
     def test_audio_similarity_detects_changed_speech(self):
         self.assertEqual(audio_similarity('台股上漲。', '台股上漲！'), 1)

@@ -11,7 +11,7 @@ from .common import GateError, now, request, sha
 
 def pack(work):
     archive = work / 'checkpoint.zip'
-    paths = [work / 'sources.json', work / 'script.json', work / 'api-budget.json']
+    paths = [work / name for name in ['sources.json', 'script.json', 'api-budget.json', 'editorial-check.json', 'audio-fidelity-check.json']]
     paths += list(work.glob('section-[0-9].json'))
     paths += [p for p in (work / 'chunks').glob('*') if re.fullmatch(r'\d{2}\.(mp3|json)', p.name)]
     bundle = json.loads((work / 'sources.json').read_text(encoding='utf-8'))
@@ -51,7 +51,7 @@ def restore(work, repo):
             path = Path(info.filename)
             if path.is_absolute() or '..' in path.parts or ':' in info.filename or '\\' in info.filename:
                 raise GateError('Unsafe checkpoint path')
-            allowed = re.fullmatch(r'(sources|script|api-budget|section-[0-9])\.json|chunks/\d{2}\.(mp3|json)|raw/[a-zA-Z0-9_]+\.bin', info.filename)
+            allowed = re.fullmatch(r'(sources|script|api-budget|editorial-check|audio-fidelity-check|section-[0-9])\.json|chunks/\d{2}\.(mp3|json)|raw/[a-zA-Z0-9_]+\.bin', info.filename)
             if not allowed:
                 raise GateError('Unexpected checkpoint entry')
         source.extractall(work)

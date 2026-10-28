@@ -207,6 +207,17 @@ def collect(work, cutoff=None):
                           'Next-date events must be called tomorrow. Does not cover untimed events, corporate or all global events.'}]
     month_name = cutoff.strftime('%B').lower()
     tasks['fed_calendar'] = (f'https://www.federalreserve.gov/newsevents/{cutoff.year}-{month_name}.htm', fed_calendar)
+    def worldbank_identity(raw):
+        text = plain(raw.decode('utf-8'))
+        index = text.find('彭安杰（Ajay Banga）')
+        if index < 0:
+            index = text.find('彭安杰')
+        if index < 0 or 'Ajay Banga' not in text:
+            raise GateError('World Bank official identity mapping not found')
+        return [{'category': 'identity_reference', 'publisher': 'World Bank official biography',
+                 'published_at': None, 'evidence': text[index:index + 900],
+                 'scope': 'Official identity translation reference only. 彭安杰 (Ajay Banga) is 彭安傑 in traditional Chinese; not current market news.'}]
+    tasks['worldbank_banga'] = ('https://blogs.worldbank.org/zh/team/a/ajay-banga', worldbank_identity)
     for series, label, max_age in [('DFF', 'Effective federal funds rate, percent (not the target range)', 10),
                                     ('DGS10', '10-year Treasury yield, percent', 10),
                                     ('CPIAUCSL', 'CPI all urban consumers, seasonally adjusted index', 65),

@@ -35,7 +35,13 @@ def main():
             bundle = collect(work)
         else:
             bundle = json.loads(sources_path.read_text(encoding='utf-8'))
-        source_gate(bundle)
+        try:
+            source_gate(bundle)
+        except GateError:
+            if args.command != 'generate':
+                raise
+            bundle = collect(work)
+            source_gate(bundle)
         verify_snapshots(bundle, work)
         print(f'Source gate passed: {len(bundle["records"])} evidence records', flush=True)
         if args.command == 'collect':
