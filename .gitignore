@@ -9,3 +9,4 @@ __pycache__/
 build/
 artifacts/
 *.egg-info/
+public/media/*.mp3

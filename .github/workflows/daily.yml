@@ -45,6 +45,12 @@ jobs:
       - name: Generate with evidence and audio gates
         if: steps.plan.outputs.skip != 'true'
         run: python -m podcast generate --work '${{ steps.plan.outputs.work }}'
+      - uses: actions/cache/restore@v4
+        if: steps.plan.outputs.skip != 'true'
+        with:
+          path: public/media
+          key: pages-media-${{ steps.plan.outputs.date }}-${{ github.run_id }}
+          restore-keys: pages-media-
       - name: Upload release and validate public media
         id: release
         if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
@@ -87,6 +93,11 @@ jobs:
       - name: Verify live RSS after deployment
         if: steps.plan.outputs.skip != 'true' && env.PUBLIC_TEST_ENABLED == 'true'
         run: python scripts/check_pages.py '${{ steps.plan.outputs.work }}'
+      - uses: actions/cache/save@v4
+        if: always() && steps.plan.outputs.skip == 'false'
+        with:
+          path: public/media
+          key: pages-media-${{ steps.plan.outputs.date }}-${{ github.run_id }}
       - uses: actions/cache/save@v4
         if: always() && steps.plan.outputs.skip == 'false'
         with:

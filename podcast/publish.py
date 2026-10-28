@@ -10,6 +10,29 @@ from .feed import build_feed
 from .hosting import probe_media
 
 
+def restore_pages_media(directory, base_url):
+    state = directory / 'episodes.json'
+    if not state.exists():
+        return
+    episodes = sorted(json.loads(state.read_text(encoding='utf-8')), key=lambda x: x['date'], reverse=True)[:20]
+    media = directory / 'media'
+    media.mkdir(parents=True, exist_ok=True)
+    for ep in episodes:
+        if not ep.get('audio_url', '').startswith(base_url.rstrip('/') + '/media/'):
+            continue
+        import re
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', ep['date']):
+            raise GateError('Invalid episode date')
+        path = media / ('test-' + ep['date'] + '.mp3')
+        if path.exists() and sha(path) == ep['sha256']:
+            continue
+        raw = request('GET', ep['audio_url']).content
+        import hashlib
+        if hashlib.sha256(raw).hexdigest() != ep['sha256']:
+            raise GateError('Existing Pages episode download checksum mismatch')
+        path.write_bytes(raw)
+
+
 def github(method, path, **kwargs):
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     if not token:
@@ -73,6 +96,7 @@ def publish(work, repo, base_url, fallback_base=''):
                    transcript_url=f'https://github.com/{repo}/releases/download/{tag}/transcript.txt')
     episodes = [x for x in episodes if x['guid'] != episode['guid']] + [episode]
     if fallback:
+        restore_pages_media(directory, base_url)
         episodes = sorted(episodes, key=lambda x: x['date'], reverse=True)[:20]
         keep = {'test-' + x['date'] + '.mp3' for x in episodes}
         media = directory / 'media'

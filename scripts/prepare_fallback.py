@@ -8,6 +8,7 @@ from pathlib import Path
 from podcast.common import GateError, save
 from podcast.feed import build_feed
 from podcast.hosting import probe_media
+from podcast.publish import restore_pages_media
 
 work = Path(sys.argv[1])
 manifest = json.loads((work / 'manifest.json').read_text(encoding='utf-8'))
@@ -22,6 +23,7 @@ except GateError:
     directory.mkdir(exist_ok=True)
     if not (directory / 'rss-test.xml').exists():
         build_feed([], directory, os.environ['PAGES_BASE_URL'])
+    restore_pages_media(directory, os.environ['PAGES_BASE_URL'])
     media = directory / 'media'
     media.mkdir(exist_ok=True)
     shutil.copyfile(work / 'episode.mp3', media / f'test-{manifest["date"]}.mp3')
